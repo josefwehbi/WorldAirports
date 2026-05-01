@@ -1,18 +1,16 @@
 """
-Name:       Student Name
-CS230:      Section XXX
+Name:       Josef Wehbi
+CS230:      Section 4
 Data:       Airports Around the World (airport-codes.csv)
 URL:        (Streamlit Cloud link after deployment)
 
 Description:
     This program explores a dataset of over 85,000 airports from around the
-    world. It allows users to filter airports by type, country, and continent,
-    then visualizes the results through an interactive PyDeck map, a bar chart
-    comparing airport counts by country, and a heatmap showing airport type
-    distribution across continents. Users can also examine elevation statistics,
-    find the highest and lowest airports, and explore a sortable, filterable
-    data table. The app uses a sidebar for navigation across three pages:
-    Overview, Explore, and Statistics.
+    world. Users can filter airports by type, country, and continent, then
+    visualize results through an interactive PyDeck map, a bar chart of airport
+    counts by country, and a heatmap of airport types by continent. The
+    Statistics page shows elevation extremes, a histogram, a pie chart, and a
+    country summary table.
 
 References:
     - Streamlit documentation: https://docs.streamlit.io
@@ -31,9 +29,6 @@ import matplotlib.ticker as ticker
 import seaborn as sns
 import pydeck as pdk
 
-# ---------------------------------------------------------------------------
-# Page configuration
-# ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="World Airport Explorer",
     page_icon="✈️",
@@ -41,7 +36,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# #[ST3] - Custom CSS for polished page design (colors, fonts, sidebar)
+# #[ST3] - Custom colors, fonts, and sidebar styling
 st.markdown(
     """
     <style>
@@ -56,9 +51,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 CONTINENT_NAMES = {
     "AF": "Africa",
     "AN": "Antarctica",
@@ -79,131 +71,70 @@ TYPE_COLORS = {
     "balloonport":    [220,  60,  60, 160],
 }
 
-# ---------------------------------------------------------------------------
-# Data loading (cached for performance)
-# ---------------------------------------------------------------------------
+
 @st.cache_data
 def load_data():
-    """
-    Load airport-codes.csv, parse the 'coordinates' column into separate
-    latitude_deg and longitude_deg floats, add a continent_name column,
-    and drop rows without usable positional data.
-
-    Returns:
-        pd.DataFrame: Cleaned airport dataset ready for mapping and analysis.
-    """
+    """Load and clean the airport dataset."""
     df = pd.read_csv("airport-codes.csv")
-
-    # The dataset stores coordinates as a single "lat, lon" string column.
-    # Split and convert to float so PyDeck and filters can use them.
     coords = df["coordinates"].str.split(",", expand=True)
     df["latitude_deg"]  = pd.to_numeric(coords[0].str.strip(), errors="coerce")
     df["longitude_deg"] = pd.to_numeric(coords[1].str.strip(), errors="coerce")
-
-    # #[COLUMNS] - Add human-readable continent name column; drop raw coordinates column
+    # #[COLUMNS] - Add continent_name column; drop raw coordinates column
     df["continent_name"] = df["continent"].map(CONTINENT_NAMES)
     df = df.drop(columns=["coordinates"])
-
-    # Drop rows missing lat/lon (cannot place on map)
     df = df.dropna(subset=["latitude_deg", "longitude_deg"])
-
-    # Ensure elevation is numeric
     df["elevation_ft"] = pd.to_numeric(df["elevation_ft"], errors="coerce")
-
     return df
 
 
 df = load_data()
 
-# ---------------------------------------------------------------------------
-# Helper functions
-# ---------------------------------------------------------------------------
-# NOTE: main() is defined after helpers and called at the bottom of this file.
 
 # #[FUNC2P] - Two parameters; country has a default value
 def filter_airports(dataframe, airport_types, country=None):
-    """
-    Filter the airport DataFrame by type list and an optional country code.
-
-    Parameters:
-        dataframe (pd.DataFrame): Full airport dataset.
-        airport_types (list): List of airport type strings to include.
-        country (str, optional): ISO country code to filter by. Default None = all.
-
-    Returns:
-        pd.DataFrame: Filtered subset.
-    """
+    """Filter airports by type and optional country code."""
     # #[FILTER1] - Filter by a single condition: airport type
     result = dataframe[dataframe["type"].isin(airport_types)]
-
-    # #[FILTER2] - Filter by type AND country (two conditions joined by AND)
+    # #[FILTER2] - Filter by type AND country (two conditions with AND)
     if country and country != "All":
         result = result[result["iso_country"] == country]
-
     return result
 
 
-# #[FUNCRETURN2] - Returns two values
+# #[FUNCRETURN2] - Returns two values: highest and lowest elevation airports
 def get_elevation_extremes(dataframe):
-    """
-    Find the airports with the highest and lowest elevation_ft values.
-
-    Parameters:
-        dataframe (pd.DataFrame): Airport dataset containing elevation_ft.
-
-    Returns:
-        tuple: (highest_row, lowest_row) as pd.Series, or (None, None) if no data.
-    """
+    """Return the highest and lowest elevation airports."""
     elev_df = dataframe.dropna(subset=["elevation_ft"])
     if elev_df.empty:
         return None, None
-    # #[MAXMIN] - idxmax/idxmin to find largest and smallest elevation
+    # #[MAXMIN] - Find largest and smallest elevation values
     highest = elev_df.loc[elev_df["elevation_ft"].idxmax()]
     lowest  = elev_df.loc[elev_df["elevation_ft"].idxmin()]
     return highest, lowest
 
 
-# #[FUNCCALL2] - Called once on Overview page, once on Statistics page
+# #[FUNCCALL2] - Called on Explore page and Statistics page
 def count_by_group(dataframe, group_col):
-    """
-    Count airports per unique value in group_col, sorted descending.
-
-    Parameters:
-        dataframe (pd.DataFrame): Airport dataset.
-        group_col (str): Column name to group by.
-
-    Returns:
-        pd.Series: Counts indexed by group values.
-    """
+    """Count airports grouped by a column, sorted descending."""
     return dataframe.groupby(group_col)["ident"].count().sort_values(ascending=False)
 
 
-# ---------------------------------------------------------------------------
-# Main application entry point
-# ---------------------------------------------------------------------------
-
 def main():
-    """
-    Main function for the World Airport Explorer Streamlit app.
-    Builds the sidebar controls, applies filters, and renders the selected page.
-    """
-    # -----------------------------------------------------------------------
+    """Main function — builds sidebar, filters data, and renders the selected page."""
+
     # Sidebar
-    # -----------------------------------------------------------------------
     st.sidebar.markdown("## ✈️ World Airports")
     st.sidebar.markdown("---")
-    st.sidebar.markdown("**Navigation**")
 
-    # #[ST1] - Dropdown (selectbox) for page navigation
+    # #[ST1] - Selectbox for page navigation
     page = st.sidebar.selectbox(
         "Go to page:",
         ["Overview", "Explore Airports", "Statistics"],
     )
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("**Filters**")
 
-    # #[ST1] - Multi-select for airport types (second selectbox/dropdown-style widget)
+    # #[ST1] - Multiselect for airport types
     all_types = sorted(df["type"].dropna().unique().tolist())
     selected_types = st.sidebar.multiselect(
         "Airport Type(s)",
@@ -211,13 +142,11 @@ def main():
         default=["large_airport", "medium_airport", "small_airport"],
     )
 
-    # Continent selectbox
     continent_opts = ["All"] + sorted(
         [v for k, v in CONTINENT_NAMES.items() if k in df["continent"].dropna().unique()]
     )
     selected_continent_name = st.sidebar.selectbox("Continent", continent_opts)
 
-    # Country selectbox (scoped to continent if one is chosen)
     if selected_continent_name != "All":
         cont_code_map = {v: k for k, v in CONTINENT_NAMES.items()}
         cont_code = cont_code_map.get(selected_continent_name)
@@ -227,29 +156,21 @@ def main():
 
     selected_country = st.sidebar.selectbox("Country (ISO Code)", ["All"] + sorted(avail_countries))
 
-    # Build the filtered DataFrame used across all pages
     filtered_df = filter_airports(df, selected_types, country=selected_country)
 
     if selected_continent_name != "All":
         cont_code_map = {v: k for k, v in CONTINENT_NAMES.items()}
         cont_code = cont_code_map.get(selected_continent_name)
-        # Two-condition filter: type + country already applied; now add continent
         filtered_df = filtered_df[filtered_df["continent"] == cont_code]
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"**Showing {len(filtered_df):,} airports**")
 
-    # ---------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
     # PAGE 1: Overview
-    # ---------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
     if page == "Overview":
         st.title("✈️ World Airport Explorer")
-        st.markdown(
-            "Explore a dataset of **85,000+ real-world airports** from "
-            "[DataHub.io](https://datahub.io/core/airport-codes). "
-            "Use the sidebar to filter by type, continent, and country, then "
-            "browse the map and preview table below."
-        )
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Airports (filtered)", f"{len(filtered_df):,}")
@@ -259,14 +180,9 @@ def main():
 
         st.markdown("---")
 
-        # #[MAP] - PyDeck ScatterplotLayer: color by type, tooltip on hover
-        st.subheader("🗺️ Airport Locations Map")
-        st.markdown(
-            "Each dot is color-coded by type: "
-            "**blue** = large, **green** = medium, **orange** = small, "
-            "**purple** = heliport, **teal** = seaplane base, **gray** = closed/other. "
-            "Hover over any dot to see the name, location, type, and elevation."
-        )
+        # #[MAP] - PyDeck ScatterplotLayer with color-coded dots and hover tooltip
+        st.subheader("Airport Locations")
+        st.caption("Color: blue = large, green = medium, orange = small, purple = heliport, teal = seaplane, gray = closed. Hover a dot for details.")
 
         map_df = filtered_df.copy()
         map_df["color"] = map_df["type"].apply(
@@ -306,8 +222,8 @@ def main():
             )
         )
 
-        # Quick data preview, sorted by country then name  #[SORT]
-        st.subheader("📋 Data Preview")
+        # #[SORT] - Sort preview table by country then name
+        st.subheader("Data Preview")
         preview_cols = ["ident", "iata_code", "name", "type",
                         "municipality", "iso_country", "continent_name", "elevation_ft"]
         sorted_preview = (
@@ -317,28 +233,20 @@ def main():
         )
         st.dataframe(sorted_preview.head(50), width="stretch")
 
-    # ---------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
     # PAGE 2: Explore Airports
-    # ---------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
     elif page == "Explore Airports":
-        st.title("🔍 Explore Airports")
-        st.markdown(
-            "Charts and a sortable table to dig into the filtered airports. "
-            "Adjust the sidebar options to compare regions and types."
-        )
+        st.title("Explore Airports")
 
         if filtered_df.empty:
             st.warning("No airports match the current filters. Adjust the sidebar options.")
             st.stop()
 
-        # #[CHART1] - Bar chart: airports by country, custom colors and labels
-        st.subheader("📊 Top Countries by Airport Count")
-        st.markdown(
-            "The 20 countries with the most airports in the current filtered selection. "
-            "Bar color scales from light to dark with count."
-        )
+        # #[CHART1] - Bar chart with custom colors, labels, and value annotations
+        st.subheader("Top Countries by Airport Count")
 
-        # First call to count_by_group  #[FUNCCALL2]
+        # #[FUNCCALL2] - First call to count_by_group
         country_counts = count_by_group(filtered_df, "iso_country").head(20)
         norm = (country_counts.values - country_counts.values.min()) / (
             country_counts.values.max() - country_counts.values.min() + 1e-9
@@ -352,7 +260,7 @@ def main():
         )
         ax1.set_title("Top 20 Countries by Airport Count", fontsize=14, fontweight="bold", pad=12)
         ax1.set_xlabel("Country (ISO Code)", fontsize=11)
-        ax1.set_ylabel("Number of Airports",  fontsize=11)
+        ax1.set_ylabel("Number of Airports", fontsize=11)
         ax1.tick_params(axis="x", rotation=45, labelsize=9)
         ax1.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
         ax1.spines[["top", "right"]].set_visible(False)
@@ -366,12 +274,8 @@ def main():
         plt.tight_layout()
         st.pyplot(fig1)
 
-        # #[CHART2] - Seaborn heatmap: airport type vs continent
-        st.subheader("🌍 Airport Type Distribution by Continent")
-        st.markdown(
-            "A heatmap of airport type counts across continents. "
-            "Darker cells indicate more airports of that type in that region."
-        )
+        # #[CHART2] - Seaborn heatmap (different chart type from CHART1)
+        st.subheader("Airport Type Distribution by Continent")
 
         heat_df = filtered_df.dropna(subset=["continent"]).copy()
         heat_df["continent_label"] = heat_df["continent"].map(CONTINENT_NAMES)
@@ -395,19 +299,18 @@ def main():
             )
             ax2.set_title("Airport Types Across Continents", fontsize=13, fontweight="bold", pad=10)
             ax2.set_xlabel("Airport Type", fontsize=11)
-            ax2.set_ylabel("Continent",    fontsize=11)
+            ax2.set_ylabel("Continent", fontsize=11)
             ax2.tick_params(axis="x", rotation=30, labelsize=9)
             plt.tight_layout()
             st.pyplot(fig2)
         else:
             st.info("Not enough continent data for the heatmap with current filters.")
 
-        # Sortable table
-        st.subheader("📋 Filtered Airport Table")
+        st.subheader("Filtered Airport Table")
 
-        # #[ST2] - Slider to control how many rows to show
+        # #[ST2] - Slider to select number of rows to display
         max_rows = st.slider(
-            "Rows to display",
+            "Number of rows to display",
             min_value=5,
             max_value=max(5, min(500, len(filtered_df))),
             value=min(25, max(5, len(filtered_df))),
@@ -422,7 +325,7 @@ def main():
 
         show_cols = ["ident", "iata_code", "name", "type",
                      "municipality", "iso_country", "continent_name", "elevation_ft"]
-        # #[SORT] - Sort the table by a user-selected column
+        # #[SORT] - Sort table by user-selected column and order
         display_df = (
             filtered_df[show_cols]
             .sort_values(sort_col, ascending=sort_asc, na_position="last")
@@ -431,22 +334,17 @@ def main():
         )
         st.dataframe(display_df, width="stretch")
 
-    # ---------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
     # PAGE 3: Statistics
-    # ---------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
     elif page == "Statistics":
-        st.title("📈 Airport Statistics")
-        st.markdown(
-            "Aggregated statistics and insights about the current filtered airport set. "
-            "Adjust the sidebar to compare different subsets."
-        )
+        st.title("Airport Statistics")
 
         if filtered_df.empty:
             st.warning("No airports match the current filters.")
             st.stop()
 
-        # Pie chart: type proportions
-        st.subheader("🥧 Airport Type Breakdown")
+        st.subheader("Airport Type Breakdown")
         type_counts = filtered_df["type"].value_counts()
         palette = plt.cm.Set3(np.linspace(0, 1, len(type_counts)))
         fig3, ax3 = plt.subplots(figsize=(7, 5))
@@ -466,8 +364,8 @@ def main():
 
         st.markdown("---")
 
-        # Continent bar chart - second call to count_by_group  #[FUNCCALL2]
-        st.subheader("🌐 Airports by Continent")
+        # #[FUNCCALL2] - Second call to count_by_group
+        st.subheader("Airports by Continent")
         cont_counts = count_by_group(filtered_df, "continent")
         cont_counts.index = cont_counts.index.map(lambda c: CONTINENT_NAMES.get(c, c))
 
@@ -490,8 +388,8 @@ def main():
 
         st.markdown("---")
 
-        # Elevation extremes  #[MAXMIN] #[FUNCRETURN2]
-        st.subheader("⛰️ Elevation Extremes")
+        # #[MAXMIN] #[FUNCRETURN2] - Find and display highest and lowest airports
+        st.subheader("Elevation Extremes")
         highest, lowest = get_elevation_extremes(filtered_df)
 
         if highest is not None:
@@ -513,7 +411,6 @@ def main():
                     f"Type: {lowest['type']}"
                 )
 
-        # Elevation histogram
         elev_data = filtered_df["elevation_ft"].dropna()
         if len(elev_data) > 10:
             fig5, ax5 = plt.subplots(figsize=(10, 4))
@@ -522,7 +419,7 @@ def main():
             ax5.set_title("Distribution of Airport Elevations", fontsize=13, fontweight="bold")
             ax5.set_xlabel("Elevation (ft)")
             ax5.set_ylabel("Number of Airports")
-            ax5.axvline(elev_data.mean(),   color="red",    linestyle="--",
+            ax5.axvline(elev_data.mean(), color="red", linestyle="--",
                         linewidth=1.2, label=f"Mean: {elev_data.mean():.0f} ft")
             ax5.axvline(elev_data.median(), color="orange", linestyle="--",
                         linewidth=1.2, label=f"Median: {elev_data.median():.0f} ft")
@@ -533,8 +430,8 @@ def main():
 
         st.markdown("---")
 
-        # Dictionary methods  #[DICTMETHOD]
-        st.subheader("📖 Airport Type Reference")
+        # #[DICTMETHOD] - Two dictionary methods: .items() and .keys()
+        st.subheader("Airport Type Reference")
         type_descriptions = {
             "large_airport":  "Scheduled international or major domestic service.",
             "medium_airport": "Regional airports with scheduled service to major hubs.",
@@ -545,24 +442,19 @@ def main():
             "balloonport":    "Designated areas for hot-air balloon operations.",
         }
 
-        # .items() - one dictionary method  #[DICTMETHOD]
         for type_name, description in type_descriptions.items():
             count = int((filtered_df["type"] == type_name).sum())
             if count > 0:
-                st.markdown(f"**{type_name}** ({count:,} in current filter): {description}")
+                st.markdown(f"**{type_name}** ({count:,}): {description}")
 
-        # .keys() - second dictionary method  #[DICTMETHOD]
         present_keys = [k for k in type_descriptions.keys() if k in filtered_df["type"].values]
-        st.caption(f"Types present in current filter: {', '.join(present_keys) if present_keys else 'none'}")
+        st.caption(f"Types in current filter: {', '.join(present_keys) if present_keys else 'none'}")
 
         st.markdown("---")
 
-        # Country summary loop  #[ITERLOOP]
-        st.subheader("🔢 Country Summary Table")
-        st.markdown("Airports per country broken down by type (top 15 by total).")
-
+        # #[ITERLOOP] - Loop through grouped DataFrame items to build summary
+        st.subheader("Country Summary Table")
         summary_rows = []
-        # #[ITERLOOP] - Loop that iterates through grouped DataFrame items
         for country_code, group in filtered_df.groupby("iso_country"):
             avg_elev = round(group["elevation_ft"].dropna().mean(), 0)
             summary_rows.append({
@@ -577,10 +469,9 @@ def main():
             })
 
         summary_df = pd.DataFrame(summary_rows)
-        # #[SORT] - Sort country summary by total descending
+        # #[SORT] - Sort country summary by total airports descending
         summary_df = summary_df.sort_values("Total", ascending=False).reset_index(drop=True)
         st.dataframe(summary_df.head(15), width="stretch")
-
 
 
 if __name__ == "__main__":
